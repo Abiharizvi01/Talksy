@@ -29,7 +29,7 @@ export const signup = async (req, res)=>{
         res.json({success: true, userData: newUser, token, message: "Account created successfully"})
     } catch (error) {
         console.log(error.message);
-        res.json({success: false, message: error.message})
+        res.status(500).json({success: false, message: "Internal server error"})
     }
 }
 
@@ -37,20 +37,32 @@ export const signup = async (req, res)=>{
 export const login = async (req, res) =>{
     try {
         const { email, password } = req.body;
-        const userData = await User.findOne({email})
+        const userData = await User.findOne({email});
 
+        // --- FIX STARTS HERE ---
+        // 1. First, check if a user with that email was found in the database.
+        // If not, send back a generic "Invalid credentials" message.
+        // We use a generic message to avoid letting attackers know if an email is registered.
+        if (!userData) {
+            return res.json({ success: false, message: "Invalid credentials" });
+        }
+
+        // 2. Only if the user exists, we proceed to compare the provided password
+        // with the hashed password stored in the database.
         const isPasswordCorrect = await bcrypt.compare(password, userData.password);
 
         if (!isPasswordCorrect){
             return res.json({ success: false, message: "Invalid credentials" });
         }
+        // --- FIX ENDS HERE ---
 
         const token = generateToken(userData._id)
 
         res.json({success: true, userData, token, message: "Login successful"})
     } catch (error) {
         console.log(error.message);
-        res.json({success: false, message: error.message})
+        // Also, it's better to send a 500 status code for actual server errors.
+        res.status(500).json({success: false, message: "Internal server error"})
     }
 }
 // Controller to check if user is authenticated
@@ -76,6 +88,6 @@ export const updateProfile = async (req, res)=>{
         res.json({success: true, user: updatedUser})
     } catch (error) {
         console.log(error.message);
-        res.json({success: false, message: error.message})
+        res.status(500).json({success: false, message: "Internal server error"})
     }
 }
