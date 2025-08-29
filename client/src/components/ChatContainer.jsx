@@ -8,11 +8,20 @@ import toast from 'react-hot-toast'
 const ChatContainer = () => {
 
     const { messages, selectedUser, setSelectedUser, sendMessage, 
-        getMessages} = useContext(ChatContext)
+        getMessages, 
+        // --- START: Get isTyping state ---
+        // Consume the isTyping state from the context.
+        isTyping
+        // --- END: Get isTyping state ---
+    } = useContext(ChatContext)
 
-    const { authUser, onlineUsers } = useContext(AuthContext)
+    const { authUser, onlineUsers, socket } = useContext(AuthContext)
 
     const scrollEnd = useRef()
+    // --- START: Typing Timeout ---
+    // This ref will hold the timeout ID for the stopTyping event.
+    const typingTimeoutRef = useRef(null);
+    // --- END: Typing Timeout ---
 
     const [input, setInput] = useState('');
 
@@ -21,6 +30,10 @@ const ChatContainer = () => {
         e.preventDefault();
         if(input.trim() === "") return null;
         await sendMessage({text: input.trim()});
+        // --- START: Stop Typing on Send ---
+        // When a message is sent, immediately notify the other user that you have stopped typing.
+        socket.emit("stopTyping", selectedUser._id);
+        // --- END: Stop Typing on Send ---
         setInput("")
     }
 
@@ -39,6 +52,28 @@ const ChatContainer = () => {
         }
         reader.readAsDataURL(file)
     }
+
+    // --- START: Handle Typing Event ---
+    // This function is called every time the user types in the message input.
+    const handleTyping = (e) => {
+        setInput(e.target.value);
+        if (socket) {
+            // Emit a "typing" event to the server, telling it that the current user is typing.
+            socket.emit("typing", selectedUser._id);
+
+            // Clear any existing timeout to reset the timer.
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+
+            // Set a new timeout. If the user doesn't type for 1 second,
+            // a "stopTyping" event will be emitted.
+            typingTimeoutRef.current = setTimeout(() => {
+                socket.emit("stopTyping", selectedUser._id);
+            }, 1000);
+        }
+    }
+    // --- END: Handle Typing Event ---
 
     useEffect(()=>{
         if(selectedUser){
@@ -85,13 +120,22 @@ const ChatContainer = () => {
 {/* ------- bottom area ------- */}
     <div className='absolute bottom-0 left-0 right-0 flex items-center gap-3 p-3'>
         <div className='flex-1 flex items-center bg-gray-100/12 px-3 rounded-full'>
-            <input onChange={(e)=> setInput(e.target.value)} value={input} onKeyDown={(e)=> e.key === "Enter" ? handleSendMessage(e) : null} type="text" placeholder="Send a message" 
+            <input 
+                // --- START: Update onChange Handler ---
+                // Use the new handleTyping function for the input's onChange event.
+                onChange={handleTyping} 
+                // --- END: Update onChange Handler ---
+                value={input} onKeyDown={(e)=> e.key === "Enter" ? handleSendMessage(e) : null} type="text" placeholder="Send a message" 
             className='flex-1 text-sm p-3 border-none rounded-lg outline-none text-white placeholder-gray-400'/>
             <input onChange={handleSendImage} type="file" id='image' accept='image/png, image/jpeg' hidden/>
             <label htmlFor="image">
                 <img src={assets.gallery_icon} alt="" className="w-5 mr-2 cursor-pointer"/>
             </label>
         </div>
+        {/* --- START: Display Typing Indicator --- */}
+        {/* If isTyping is true, display a "typing..." message. */}
+        {isTyping && <p className="text-white">typing...</p>}
+        {/* --- END: Display Typing Indicator --- */}
         <img onClick={handleSendMessage} src={assets.send_button} alt="" className="w-7 cursor-pointer" />
     </div>
 

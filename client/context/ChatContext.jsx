@@ -11,6 +11,10 @@ export const ChatProvider = ({ children })=>{
     const [users, setUsers] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null)
     const [unseenMessages, setUnseenMessages] = useState({})
+    // --- START: Typing Indicator State ---
+    // This state will be true if the selected user is typing, and false otherwise.
+    const [isTyping, setIsTyping] = useState(false);
+    // --- END: Typing Indicator State ---
 
     const {socket, axios} = useContext(AuthContext);
 
@@ -67,12 +71,27 @@ export const ChatProvider = ({ children })=>{
                     ...prevUnseenMessages, [newMessage.senderId] : prevUnseenMessages[newMessage.senderId] ? prevUnseenMessages[newMessage.senderId] + 1 : 1
                 }))
             }
-        })
+        });
+        
+        // --- START: Listen for Typing Events ---
+        // When a "typing" event is received, set isTyping to true.
+        socket.on("typing", () => setIsTyping(true));
+        // When a "stopTyping" event is received, set isTyping to false.
+        socket.on("stopTyping", () => setIsTyping(false));
+        // --- END: Listen for Typing Events ---
     }
 
     // function to unsubscribe from messages
     const unsubscribeFromMessages = ()=>{
-        if(socket) socket.off("newMessage");
+        // --- START: Unsubscribe from Typing Events ---
+        // It's important to remove the event listeners when the component unmounts
+        // to prevent memory leaks.
+        if(socket) {
+            socket.off("newMessage");
+            socket.off("typing");
+            socket.off("stopTyping");
+        }
+        // --- END: Unsubscribe from Typing Events ---
     }
 
     useEffect(()=>{
@@ -81,7 +100,11 @@ export const ChatProvider = ({ children })=>{
     },[socket, selectedUser])
 
     const value = {
-        messages, users, selectedUser, getUsers, getMessages, sendMessage, setSelectedUser, unseenMessages, setUnseenMessages
+        messages, users, selectedUser, getUsers, getMessages, sendMessage, setSelectedUser, unseenMessages, setUnseenMessages, 
+        // --- START: Expose Typing State ---
+        // Make the isTyping state available to any component that uses this context.
+        isTyping
+        // --- END: Expose Typing State ---
     }
 
     return (
